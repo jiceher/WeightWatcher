@@ -1,0 +1,90 @@
+{
+  "appTitle": "Weight Watcher",
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "measurements": "Mesures",
+    "charts": "Graphiques",
+    "plan": "Plan",
+    "profile": "Profil",
+    "settings": "Paramètres"
+  },
+  "dashboard": {
+    "currentWeight": "Poids actuel",
+    "targetWeight": "Poids cible",
+    "bmi": "IMC",
+    "deltaToTarget": "Écart à la cible",
+    "weeklyTrend": "Tendance hebdomadaire",
+    "monthlyTrend": "Tendance mensuelle",
+    "totalChange": "Variation totale",
+    "progress": "Progression",
+    "noData": "Aucune mesure — ajoutez votre premier poids.",
+    "insufficient": "Données insuffisantes"
+  },
+  "bmi": {
+    "Underweight": "Insuffisance pondérale",
+    "Normal": "Poids normal",
+    "Overweight": "Surpoids",
+    "Obese": "Obésité"
+  },
+  "measurements": {
+    "title": "Mesures",
+    "add": "Ajouter une mesure",
+    "weight": "Poids",
+    "date": "Date",
+    "time": "Heure",
+    "actions": "Actions",
+    "edit": "Modifier",
+    "delete": "Supprimer",
+    "save": "Enregistrer",
+    "cancel": "Annuler",
+    "empty": "Aucune mesure enregistrée."
+  },
+  "charts": {
+    "title": "Évolution du poids",
+    "all": "Depuis la première mesure",
+    "year": "Année en cours",
+    "month": "Mois en cours",
+    "fromMax": "Depuis le poids maximum"
+  },
+  "plan": {
+    "title": "Plan de perte de poids",
+    "target": "Poids cible",
+    "weeklyRate": "Objectif hebdomadaire",
+    "estimatedDate": "Date cible estimée",
+    "weeksNeeded": "Semaines nécessaires",
+    "milestones": "Étapes",
+    "warning": "Attention : ce rythme dépasse le maximum sain recommandé de {{max}} kg/semaine.",
+    "setTarget": "Définissez un poids cible pour générer un plan.",
+    "save": "Enregistrer le plan"
+  },
+  "profile": {
+    "title": "Profil",
+    "height": "Taille (cm)",
+    "age": "Âge",
+    "gender": "Genre",
+    "male": "Homme",
+    "female": "Femme",
+    "other": "Autre",
+    "weight": "Poids actuel",
+    "save": "Enregistrer le profil",
+    "saved": "Profil enregistré."
+  },
+  "settings": {
+    "title": "Paramètres",
+    "language": "Langue",
+    "units": "Unités",
+    "metric": "Métrique (kg, cm)",
+    "imperial": "Impérial (lb, in)",
+    "maxRate": "Rythme sain max (kg/sem)",
+    "export": "Export",
+    "exportCsv": "Exporter en CSV",
+    "exportPdf": "Exporter le rapport PDF",
+    "backup": "Sauvegarde",
+    "backupNow": "Sauvegarder la base",
+    "restore": "Restaurer une sauvegarde",
+    "restoreConfirm": "La restauration remplacera toutes les données actuelles. Continuer ?",
+    "done": "Terminé."
+  },
+  "units": { "kg": "kg", "lb": "lb", "perWeek": "{{unit}}/semaine", "perMonth": "{{unit}}/mois" },
+  "errors": { "generic": "Erreur : {{message}}" }
+}

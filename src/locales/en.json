@@ -1,0 +1,90 @@
+{
+  "appTitle": "Weight Watcher",
+  "nav": {
+    "dashboard": "Dashboard",
+    "measurements": "Measurements",
+    "charts": "Charts",
+    "plan": "Plan",
+    "profile": "Profile",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "currentWeight": "Current weight",
+    "targetWeight": "Target weight",
+    "bmi": "BMI",
+    "deltaToTarget": "To target",
+    "weeklyTrend": "Weekly trend",
+    "monthlyTrend": "Monthly trend",
+    "totalChange": "Total change",
+    "progress": "Progress",
+    "noData": "No measurements yet — add your first weight.",
+    "insufficient": "Not enough data"
+  },
+  "bmi": {
+    "Underweight": "Underweight",
+    "Normal": "Normal weight",
+    "Overweight": "Overweight",
+    "Obese": "Obese"
+  },
+  "measurements": {
+    "title": "Measurements",
+    "add": "Add measurement",
+    "weight": "Weight",
+    "date": "Date",
+    "time": "Time",
+    "actions": "Actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "empty": "No measurements recorded."
+  },
+  "charts": {
+    "title": "Weight evolution",
+    "all": "Since first measurement",
+    "year": "Current year",
+    "month": "Current month",
+    "fromMax": "From maximum weight"
+  },
+  "plan": {
+    "title": "Weight-loss plan",
+    "target": "Target weight",
+    "weeklyRate": "Weekly objective",
+    "estimatedDate": "Estimated target date",
+    "weeksNeeded": "Weeks needed",
+    "milestones": "Milestones",
+    "warning": "Warning: this rate exceeds the recommended healthy maximum of {{max}} kg/week.",
+    "setTarget": "Set a target weight to generate a plan.",
+    "save": "Save plan"
+  },
+  "profile": {
+    "title": "Profile",
+    "height": "Height (cm)",
+    "age": "Age",
+    "gender": "Gender",
+    "male": "Male",
+    "female": "Female",
+    "other": "Other",
+    "weight": "Current weight",
+    "save": "Save profile",
+    "saved": "Profile saved."
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "units": "Units",
+    "metric": "Metric (kg, cm)",
+    "imperial": "Imperial (lb, in)",
+    "maxRate": "Max healthy rate (kg/week)",
+    "export": "Export",
+    "exportCsv": "Export CSV",
+    "exportPdf": "Export PDF report",
+    "backup": "Backup",
+    "backupNow": "Backup database",
+    "restore": "Restore from backup",
+    "restoreConfirm": "Restore will replace all current data. Continue?",
+    "done": "Done."
+  },
+  "units": { "kg": "kg", "lb": "lb", "perWeek": "{{unit}}/week", "perMonth": "{{unit}}/month" },
+  "errors": { "generic": "Error: {{message}}" }
+}
