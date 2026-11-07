@@ -2,6 +2,7 @@ mod db;
 mod domain;
 
 use db::{Db, Measurement, Profile};
+use rusqlite::Connection;
 use domain::{bmi, bmi_category, generate_plan, progress_percent, weekly_trend, Plan};
 use serde::Serialize;
 use std::path::PathBuf;
@@ -178,13 +179,59 @@ fn export_csv(state: tauri::State<Db>, path: String) -> Result<(), String> {
     std::fs::write(&path, out).map_err(|e| e.to_string())
 }
 
+#[derive(Serialize)]
+struct ImportResult {
+    imported: usize,
+    skipped: usize,
+}
+
+/// Import measurements from a CSV with the same format as export_csv:
+/// `id,measured_at,weight_kg` (header row required). The id column is
+/// ignored; rows with duplicate timestamps or invalid values are skipped.
+#[tauri::command]
+fn import_csv(state: tauri::State<Db>, path: String) -> Result<ImportResult, String> {
+    let content = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let mut imported = 0usize;
+    let mut skipped = 0usize;
+    for (i, line) in content.lines().enumerate() {
+        let line = line.trim();
+        if line.is_empty() || (i == 0 && line.starts_with("id,")) {
+            continue;
+        }
+        let cols: Vec<&str> = line.split(',').map(|c| c.trim()).collect();
+        if cols.len() < 3 {
+            skipped += 1;
+            continue;
+        }
+        let measured_at: i64 = match cols[1].parse() {
+            Ok(v) => v,
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
+        };
+        let weight_kg: f64 = match cols[2].parse() {
+            Ok(v) => v,
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
+        };
+        match db(&state).add_measurement(weight_kg, measured_at) {
+            Ok(_) => imported += 1,
+            Err(_) => skipped += 1,
+        }
+    }
+    Ok(ImportResult { imported, skipped })
+}
+
 #[tauri::command]
 fn backup_db(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    let src = db_path(&app);
-    // Checkpoint WAL so the copy is self-contained.
     let state = app.state::<Db>();
+    let src = state.db_path();
+    // Checkpoint WAL so the copy is self-contained.
     {
-        let conn = state.0.lock().unwrap();
+        let conn = state.conn.lock().unwrap();
         conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
             .map_err(|e| e.to_string())?;
     }
@@ -194,16 +241,131 @@ fn backup_db(app: tauri::AppHandle, path: String) -> Result<(), String> {
 
 #[tauri::command]
 fn restore_db(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    let dst = db_path(&app);
+    let dst = app.state::<Db>().db_path();
     std::fs::copy(&path, &dst).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-fn db_path(app: &tauri::AppHandle) -> PathBuf {
+// ---------- Multi-user support: one SQLite file per user ----------
+
+#[derive(Serialize)]
+struct UserEntry {
+    slug: String,
+    name: String,
+    current: bool,
+}
+
+fn users_dir(app: &tauri::AppHandle) -> PathBuf {
     app.path()
         .app_data_dir()
         .expect("app data dir")
-        .join("weight_watcher.db")
+        .join("users")
+}
+
+fn current_user_file(app: &tauri::AppHandle) -> PathBuf {
+    app.path()
+        .app_data_dir()
+        .expect("app data dir")
+        .join("current_user.txt")
+}
+
+fn valid_slug(slug: &str) -> bool {
+    !slug.is_empty()
+        && slug.len() <= 32
+        && slug
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
+        && slug.chars().next().unwrap().is_ascii_alphanumeric()
+}
+
+fn slugify(name: &str) -> String {
+    let mut s: String = name
+        .to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
+        .collect();
+    while s.contains("--") {
+        s = s.replace("--", "-");
+    }
+    let s = s.trim_matches('-').chars().take(32).collect::<String>();
+    if s.is_empty() {
+        "user".to_string()
+    } else {
+        s
+    }
+}
+
+fn read_current_slug(app: &tauri::AppHandle) -> String {
+    std::fs::read_to_string(current_user_file(app))
+        .ok()
+        .map(|s| s.trim().to_string())
+        .filter(|s| valid_slug(s))
+        .unwrap_or_else(|| "default".to_string())
+}
+
+fn write_current_slug(app: &tauri::AppHandle, slug: &str) -> Result<(), String> {
+    std::fs::write(current_user_file(app), slug).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_users(app: tauri::AppHandle) -> Result<Vec<UserEntry>, String> {
+    let dir = users_dir(&app);
+    let current = read_current_slug(&app);
+    let mut users = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&dir) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if p.extension().map(|x| x == "db").unwrap_or(false) {
+                let slug = p.file_stem().unwrap().to_string_lossy().to_string();
+                // Best-effort: read the display name from the profile row.
+                let name = Connection::open(&p)
+                    .and_then(|c| {
+                        c.query_row("SELECT name FROM profile WHERE id = 1", [], |r| {
+                            r.get::<_, String>(0)
+                        })
+                    })
+                    .unwrap_or_default();
+                users.push(UserEntry {
+                    name: if name.is_empty() { slug.clone() } else { name },
+                    current: slug == current,
+                    slug,
+                });
+            }
+        }
+    }
+    users.sort_by(|a, b| a.slug.cmp(&b.slug));
+    Ok(users)
+}
+
+#[tauri::command]
+fn current_user(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(read_current_slug(&app))
+}
+
+#[tauri::command]
+fn switch_user(app: tauri::AppHandle, slug: String) -> Result<(), String> {
+    if !valid_slug(&slug) {
+        return Err("Invalid user name".into());
+    }
+    let path = users_dir(&app).join(format!("{slug}.db"));
+    app.state::<Db>().switch(&path)?;
+    write_current_slug(&app, &slug)
+}
+
+#[tauri::command]
+fn create_user(app: tauri::AppHandle, name: String) -> Result<String, String> {
+    let base = slugify(&name);
+    let dir = users_dir(&app);
+    // Ensure uniqueness: user, user-2, user-3, ...
+    let mut slug = base.clone();
+    for i in 2.. {
+        if !dir.join(format!("{slug}.db")).exists() {
+            break;
+        }
+        slug = format!("{base}-{i}");
+    }
+    switch_user(app, slug.clone())?;
+    Ok(slug)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -212,7 +374,20 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
-            let path = db_path(app.handle());
+            let data_dir = app.path().app_data_dir().expect("app data dir");
+            let udir = users_dir(app.handle());
+            std::fs::create_dir_all(&udir).map_err(|e| e.to_string())?;
+            // One-time migration: move the legacy single-user DB into users/.
+            let legacy = data_dir.join("weight_watcher.db");
+            let is_empty = std::fs::read_dir(&udir)
+                .map(|mut d| d.next().is_none())
+                .unwrap_or(true);
+            if legacy.exists() && is_empty {
+                std::fs::rename(&legacy, udir.join("default.db"))
+                    .map_err(|e| e.to_string())?;
+            }
+            let slug = read_current_slug(app.handle());
+            let path = udir.join(format!("{slug}.db"));
             let database = Db::open(&path)?;
             app.manage(database);
             Ok(())
@@ -229,8 +404,13 @@ pub fn run() {
             get_dashboard,
             get_plan,
             export_csv,
+            import_csv,
             backup_db,
             restore_db,
+            list_users,
+            current_user,
+            switch_user,
+            create_user,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Weight Watcher");

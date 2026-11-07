@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface Profile {
+  name: string;
   height_cm: number;
   age: number;
   gender: string;
@@ -35,6 +36,12 @@ export interface Plan {
   exceeds_healthy_rate: boolean;
 }
 
+export interface UserEntry {
+  slug: string;
+  name: string;
+  current: boolean;
+}
+
 export type Settings = Record<string, string>;
 
 // In dev (plain vite, no Tauri runtime) fall back to in-memory mocks so the UI
@@ -48,12 +55,17 @@ let mockMeasurements: Measurement[] = [
   { id: 4, weight_kg: 88.2, measured_at: Date.now() / 1000 - 7 * 86400 },
 ];
 let mockProfile: Profile | null = {
+  name: "Alex",
   height_cm: 178,
   age: 40,
   gender: "male",
   initial_weight_kg: 92.0,
 };
 let mockSettings: Settings = { target_weight_kg: "80", weekly_rate_kg: "0.5" };
+let mockUsers: UserEntry[] = [
+  { slug: "alex", name: "Alex", current: true },
+  { slug: "sam", name: "Sam", current: false },
+];
 
 function slope(points: [number, number][], days: number): number | null {
   const pts = points.filter(([t]) => t >= Date.now() / 1000 - days * 86400);
@@ -93,6 +105,19 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     case "delete_measurement":
       mockMeasurements = mockMeasurements.filter((x) => x.id !== args!.id);
       return undefined as T;
+    case "list_users":
+      return [...mockUsers] as T;
+    case "current_user":
+      return (mockUsers.find((u) => u.current)?.slug ?? "alex") as T;
+    case "switch_user":
+      mockUsers.forEach((u) => (u.current = u.slug === args!.slug));
+      return undefined as T;
+    case "create_user": {
+      const slug = String(args!.name).toLowerCase().replace(/[^a-z0-9]+/g, "-") || "user";
+      mockUsers.forEach((u) => (u.current = false));
+      mockUsers.push({ slug, name: String(args!.name), current: true });
+      return slug as T;
+    }
     case "get_settings":
       return { ...mockSettings } as T;
     case "set_setting":
@@ -154,8 +179,14 @@ export const api = {
   getDashboard: () => call<Dashboard>("get_dashboard"),
   getPlan: () => call<Plan | null>("get_plan"),
   exportCsv: (path: string) => call<void>("export_csv", { path }),
+  importCsv: (path: string) =>
+    call<{ imported: number; skipped: number }>("import_csv", { path }),
   backupDb: (path: string) => call<void>("backup_db", { path }),
   restoreDb: (path: string) => call<void>("restore_db", { path }),
+  listUsers: () => call<UserEntry[]>("list_users"),
+  currentUser: () => call<string>("current_user"),
+  switchUser: (slug: string) => call<void>("switch_user", { slug }),
+  createUser: (name: string) => call<string>("create_user", { name }),
 };
 
 export const isTauri = hasTauri;

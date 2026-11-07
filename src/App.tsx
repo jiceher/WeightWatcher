@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, createContext, useContext } from "react";
 import { useTranslation } from "react-i18next";
-import { api, Settings } from "./api";
+import { api, Settings, UserEntry } from "./api";
 import { Units } from "./units";
 import DashboardPage from "./pages/Dashboard";
 import MeasurementsPage from "./pages/Measurements";
@@ -19,6 +19,58 @@ const Ctx = createContext<AppCtx>({ units: "metric", settings: {}, refreshSettin
 export const useApp = () => useContext(Ctx);
 
 type Page = "dashboard" | "measurements" | "charts" | "plan" | "profile" | "settings";
+
+function UserSwitcher() {
+  const { t } = useTranslation();
+  const [users, setUsers] = useState<UserEntry[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  useEffect(() => {
+    api.listUsers().then(setUsers);
+  }, []);
+
+  const current = users.find((u) => u.current);
+
+  const switchTo = async (slug: string) => {
+    if (slug === current?.slug) return;
+    await api.switchUser(slug);
+    window.location.reload();
+  };
+
+  const create = async () => {
+    if (!newName.trim()) return;
+    await api.createUser(newName.trim());
+    window.location.reload();
+  };
+
+  return (
+    <div className="user-switcher">
+      <label>{t("users.current")}</label>
+      {adding ? (
+        <div className="row">
+          <input
+            autoFocus
+            placeholder={t("users.namePlaceholder")}
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && create()}
+          />
+          <button className="primary" onClick={create}>{t("users.add")}</button>
+        </div>
+      ) : (
+        <div className="row">
+          <select value={current?.slug ?? ""} onChange={(e) => switchTo(e.target.value)}>
+            {users.map((u) => (
+              <option key={u.slug} value={u.slug}>{u.name}</option>
+            ))}
+          </select>
+          <button className="ghost" onClick={() => setAdding(true)}>+</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -67,6 +119,7 @@ export default function App() {
       <div className="app">
         <nav className="sidebar">
           <h1>{t("appTitle")}</h1>
+          <UserSwitcher />
           {(Object.keys(pages) as Page[]).map((p) => (
             <button
               key={p}

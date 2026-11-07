@@ -68,3 +68,10 @@ label { display: block; margin: 14px 0 6px; color: var(--muted); font-size: 13px
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .progress-bar { height: 8px; background: #12141c; border-radius: 4px; overflow: hidden; margin-top: 8px; }
 .progress-bar > div { height: 100%; background: var(--accent); }
+
+.user-switcher { margin: 0 8px 16px; }
+.user-switcher label { margin: 0 0 6px; }
+.user-switcher select, .user-switcher input { width: 100%; font-size: 13px; padding: 7px 9px; }
+.user-switcher .row { flex-wrap: nowrap; }
+.user-switcher .row input { flex: 1; min-width: 0; }
+.user-switcher .row .primary, .user-switcher .row .ghost { padding: 6px 10px; }

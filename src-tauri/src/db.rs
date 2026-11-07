@@ -7,6 +7,7 @@ use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Profile {
+    pub name: String,
     pub height_cm: f64,
     pub age: i64,
     pub gender: String,
@@ -20,7 +21,48 @@ pub struct Measurement {
     pub measured_at: i64, // unix seconds
 }
 
-pub struct Db(pub Mutex<Connection>);
+pub struct Db {
+    pub conn: Mutex<Connection>,
+    pub path: Mutex<std::path::PathBuf>,
+}
+
+fn migrate(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL;
+         CREATE TABLE IF NOT EXISTS profile (
+           id INTEGER PRIMARY KEY CHECK (id = 1),
+           height_cm REAL NOT NULL,
+           age INTEGER NOT NULL,
+           gender TEXT NOT NULL,
+           initial_weight_kg REAL NOT NULL DEFAULT 0
+         );
+         CREATE TABLE IF NOT EXISTS measurements (
+           id INTEGER PRIMARY KEY AUTOINCREMENT,
+           weight_kg REAL NOT NULL CHECK (weight_kg BETWEEN 20.0 AND 400.0),
+           measured_at INTEGER NOT NULL UNIQUE
+         );
+         CREATE TABLE IF NOT EXISTS settings (
+           key TEXT PRIMARY KEY,
+           value TEXT NOT NULL
+         );",
+    )
+    .map_err(|e| e.to_string())?;
+    // Migration: add name column to existing databases.
+    let has_name: bool = conn
+        .prepare("PRAGMA table_info(profile)")
+        .map_err(|e| e.to_string())?
+        .query_map([], |r| r.get::<_, String>(1))
+        .map_err(|e| e.to_string())?
+        .any(|c| c.map(|n| n == "name").unwrap_or(false));
+    if !has_name {
+        conn.execute(
+            "ALTER TABLE profile ADD COLUMN name TEXT NOT NULL DEFAULT ''",
+            [],
+        )
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
 
 impl Db {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -28,40 +70,46 @@ impl Db {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
         }
         let conn = Connection::open(path).map_err(|e| e.to_string())?;
-        conn.execute_batch(
-            "PRAGMA journal_mode = WAL;
-             CREATE TABLE IF NOT EXISTS profile (
-               id INTEGER PRIMARY KEY CHECK (id = 1),
-               height_cm REAL NOT NULL,
-               age INTEGER NOT NULL,
-               gender TEXT NOT NULL,
-               initial_weight_kg REAL NOT NULL DEFAULT 0
-             );
-             CREATE TABLE IF NOT EXISTS measurements (
-               id INTEGER PRIMARY KEY AUTOINCREMENT,
-               weight_kg REAL NOT NULL CHECK (weight_kg BETWEEN 20.0 AND 400.0),
-               measured_at INTEGER NOT NULL UNIQUE
-             );
-             CREATE TABLE IF NOT EXISTS settings (
-               key TEXT PRIMARY KEY,
-               value TEXT NOT NULL
-             );",
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(Db(Mutex::new(conn)))
+        migrate(&conn)?;
+        Ok(Db {
+            conn: Mutex::new(conn),
+            path: Mutex::new(path.to_path_buf()),
+        })
+    }
+
+    /// Switch the active connection to another database file (created if absent).
+    pub fn switch(&self, path: &Path) -> Result<(), String> {
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        let conn = Connection::open(path).map_err(|e| e.to_string())?;
+        migrate(&conn)?;
+        {
+            let mut guard = self.conn.lock().unwrap();
+            // Checkpoint the old WAL before dropping it.
+            let _ = guard.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+            *guard = conn;
+        }
+        *self.path.lock().unwrap() = path.to_path_buf();
+        Ok(())
+    }
+
+    pub fn db_path(&self) -> std::path::PathBuf {
+        self.path.lock().unwrap().clone()
     }
 
     pub fn get_profile(&self) -> Result<Option<Profile>, String> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.query_row(
-            "SELECT height_cm, age, gender, initial_weight_kg FROM profile WHERE id = 1",
+            "SELECT name, height_cm, age, gender, initial_weight_kg FROM profile WHERE id = 1",
             [],
             |r| {
                 Ok(Profile {
-                    height_cm: r.get(0)?,
-                    age: r.get(1)?,
-                    gender: r.get(2)?,
-                    initial_weight_kg: r.get(3)?,
+                    name: r.get(0)?,
+                    height_cm: r.get(1)?,
+                    age: r.get(2)?,
+                    gender: r.get(3)?,
+                    initial_weight_kg: r.get(4)?,
                 })
             },
         )
@@ -70,7 +118,7 @@ impl Db {
     }
 
     pub fn save_profile(&self, p: &Profile) -> Result<(), String> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let existing: Option<f64> = conn
             .query_row(
                 "SELECT initial_weight_kg FROM profile WHERE id = 1",
@@ -80,10 +128,10 @@ impl Db {
             .optional()
             .map_err(|e| e.to_string())?;
         conn.execute(
-            "INSERT INTO profile (id, height_cm, age, gender, initial_weight_kg)
-             VALUES (1, ?1, ?2, ?3, ?4)
-             ON CONFLICT(id) DO UPDATE SET height_cm = ?1, age = ?2, gender = ?3",
-            params![p.height_cm, p.age, p.gender, p.initial_weight_kg],
+            "INSERT INTO profile (id, name, height_cm, age, gender, initial_weight_kg)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(id) DO UPDATE SET name = ?1, height_cm = ?2, age = ?3, gender = ?4",
+            params![p.name, p.height_cm, p.age, p.gender, p.initial_weight_kg],
         )
         .map_err(|e| e.to_string())?;
         // Keep the original initial weight once set (initial = first profile weight).
@@ -107,7 +155,7 @@ impl Db {
     }
 
     pub fn list_measurements(&self) -> Result<Vec<Measurement>, String> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let mut stmt = conn
             .prepare("SELECT id, weight_kg, measured_at FROM measurements ORDER BY measured_at")
             .map_err(|e| e.to_string())?;
@@ -127,7 +175,7 @@ impl Db {
         if !(20.0..=400.0).contains(&weight_kg) {
             return Err("Weight must be between 20 and 400 kg".into());
         }
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO measurements (weight_kg, measured_at) VALUES (?1, ?2)",
             params![weight_kg, measured_at],
@@ -146,7 +194,7 @@ impl Db {
         if !(20.0..=400.0).contains(&weight_kg) {
             return Err("Weight must be between 20 and 400 kg".into());
         }
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         let n = conn
             .execute(
                 "UPDATE measurements SET weight_kg = ?1, measured_at = ?2 WHERE id = ?3",
@@ -160,14 +208,14 @@ impl Db {
     }
 
     pub fn delete_measurement(&self, id: i64) -> Result<(), String> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM measurements WHERE id = ?1", params![id])
             .map_err(|e| e.to_string())?;
         Ok(())
     }
 
     pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.query_row("SELECT value FROM settings WHERE key = ?1", params![key], |r| {
             r.get(0)
         })
@@ -176,7 +224,7 @@ impl Db {
     }
 
     pub fn set_setting(&self, key: &str, value: &str) -> Result<(), String> {
-        let conn = self.0.lock().unwrap();
+        let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = ?2",

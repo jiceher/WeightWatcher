@@ -7,6 +7,7 @@ import { displayToCm, displayToKg, kgToDisplay, weightUnit } from "../units";
 export default function ProfilePage({ onSaved }: { onSaved?: () => void }) {
   const { t } = useTranslation();
   const { units } = useApp();
+  const [name, setName] = useState("");
   const [height, setHeight] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("male");
@@ -17,6 +18,7 @@ export default function ProfilePage({ onSaved }: { onSaved?: () => void }) {
   useEffect(() => {
     api.getProfile().then((p) => {
       if (p) {
+        setName(p.name);
         setHeight(displayToCm(p.height_cm, units).toFixed(0));
         setAge(String(p.age));
         setGender(p.gender);
@@ -32,6 +34,7 @@ export default function ProfilePage({ onSaved }: { onSaved?: () => void }) {
   const submit = async () => {
     setError("");
     const p: Profile = {
+      name,
       height_cm: displayToCm(parseFloat(height), units),
       age: parseInt(age, 10),
       gender,
@@ -52,6 +55,9 @@ export default function ProfilePage({ onSaved }: { onSaved?: () => void }) {
       <h2>{t("profile.title")}</h2>
       {error && <div className="warn">{t("errors.generic", { message: error })}</div>}
       <div className="form-row">
+        <label>{t("profile.name")}</label>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
+
         <label>
           {units === "imperial" ? t("profile.height").replace("(cm)", "(in)") : t("profile.height")}
         </label>

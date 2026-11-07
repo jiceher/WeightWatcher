@@ -59,6 +59,7 @@
   },
   "profile": {
     "title": "Profile",
+    "name": "Name",
     "height": "Height (cm)",
     "age": "Age",
     "gender": "Gender",
@@ -78,12 +79,19 @@
     "maxRate": "Max healthy rate (kg/week)",
     "export": "Export",
     "exportCsv": "Export CSV",
+    "importCsv": "Import CSV",
+    "importResult": "Imported {{imported}} measurements, {{skipped}} skipped.",
     "exportPdf": "Export PDF report",
     "backup": "Backup",
     "backupNow": "Backup database",
     "restore": "Restore from backup",
     "restoreConfirm": "Restore will replace all current data. Continue?",
     "done": "Done."
+  },
+  "users": {
+    "current": "User",
+    "add": "Add",
+    "namePlaceholder": "New user name"
   },
   "units": { "kg": "kg", "lb": "lb", "perWeek": "{{unit}}/week", "perMonth": "{{unit}}/month" },
   "errors": { "generic": "Error: {{message}}" }

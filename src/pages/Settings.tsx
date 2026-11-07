@@ -35,6 +35,14 @@ export default function SettingsPage() {
     }
   };
 
+  const importCsv = async () => {
+    const path = await pickOpenPath([{ name: "CSV", extensions: ["csv"] }]);
+    if (path) {
+      const r = await api.importCsv(path);
+      setMsg(t("settings.importResult", { imported: r.imported, skipped: r.skipped }));
+    }
+  };
+
   const exportPdf = async () => {
     const [dash, measurements] = await Promise.all([api.getDashboard(), api.listMeasurements()]);
     const doc = new jsPDF();
@@ -131,6 +139,7 @@ export default function SettingsPage() {
       <h3 style={{ marginTop: 32 }}>{t("settings.export")}</h3>
       <div className="row">
         <button className="ghost" onClick={exportCsv}>{t("settings.exportCsv")}</button>
+        <button className="ghost" onClick={importCsv}>{t("settings.importCsv")}</button>
         <button className="ghost" onClick={exportPdf}>{t("settings.exportPdf")}</button>
       </div>
 
